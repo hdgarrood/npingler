@@ -17,6 +17,8 @@ use crate::cli::Args;
 use crate::cli::DiffArgs;
 use crate::cli::ProfileSpec;
 use crate::config::Config;
+use crate::diff::DiffResult;
+use crate::diff::diff;
 use crate::format_bulleted_list;
 use crate::fs::resolve_symlink_utf8;
 use crate::nix::Derivation;
@@ -43,18 +45,6 @@ struct ResolvedProfile {
     /// been built.
     may_need_building: bool,
     derivation: Derivation,
-}
-
-#[derive(Debug, Clone)]
-enum DiffResult {
-    /// There's no previous profile to compare with - for example, when someone is running npingler
-    /// for the very first time and ~/.nix-profile doesn't exist yet.
-    NoPreviousProfile,
-    /// Either the profile paths are the same, or the profile trees are the same.
-    NoChanges,
-    /// There are changes. The String contains a human-readable representation of them (which
-    /// may ANSI escape codes) intended for printing to the console.
-    Changes(String),
 }
 
 impl App {
@@ -273,7 +263,11 @@ impl App {
         self.ensure_profile(&new_profile, "new profile")?;
 
         let old_profile_path = old_profile.as_ref().map(|p| p.path.as_path());
-        match self.diff_trees(old_profile_path, &new_profile.path) {
+        match diff(
+            self.config.diff_style(),
+            old_profile_path,
+            &new_profile.path,
+        ) {
             Err(err) => {
                 let old_profile_path = match old_profile_path {
                     Some(path) => path.as_str(),
@@ -284,11 +278,11 @@ impl App {
                     new_profile.path
                 );
             }
-            Ok(DiffResult::NoPreviousProfile) => (),
             Ok(DiffResult::NoChanges) => {
                 tracing::info!("No changes, profile already up to date");
             }
-            Ok(DiffResult::Changes(diff)) => {
+            Ok(DiffResult::Changes(None)) => {}
+            Ok(DiffResult::Changes(Some(diff))) => {
                 tracing::info!("Changes from current profile:\n{}", diff);
             }
         };
@@ -320,14 +314,18 @@ impl App {
 
         let old_profile_path = old_profile.as_ref().map(|p| p.path.as_path());
 
-        match self.diff_trees(old_profile_path, &new_profile.path)? {
-            DiffResult::NoPreviousProfile => (),
+        match diff(
+            self.config.diff_style(),
+            old_profile_path,
+            &new_profile.path,
+        )? {
             DiffResult::NoChanges => {
                 tracing::info!("No changes");
             }
-            DiffResult::Changes(diff) => {
+            DiffResult::Changes(Some(diff)) => {
                 tracing::info!("Changes:\n{}", diff);
             }
+            DiffResult::Changes(None) => {}
         };
 
         Ok(())
@@ -446,30 +444,6 @@ impl App {
         };
 
         Ok(())
-    }
-
-    fn diff_trees(&self, old: Option<&Utf8Path>, new: &Utf8Path) -> miette::Result<DiffResult> {
-        let old = match old {
-            None => return Ok(DiffResult::NoPreviousProfile),
-            Some(old) => old,
-        };
-
-        if old == new {
-            return Ok(DiffResult::NoChanges);
-        }
-
-        let diff = diff_trees::Diff::new(old.as_std_path(), new.as_std_path()).into_diagnostic()?;
-        // We have to display the diff to see if it's actually empty. See https://github.com/9999years/npingler/issues/68
-        let displayed_diff = format!(
-            "{}",
-            diff.display(diff_trees::DisplayDiffOpts::new().color(true))
-        );
-
-        if displayed_diff.is_empty() {
-            Ok(DiffResult::NoChanges)
-        } else {
-            Ok(DiffResult::Changes(displayed_diff))
-        }
     }
 
     #[instrument(level = "debug", skip(self))]

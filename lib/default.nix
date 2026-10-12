@@ -9,5 +9,7 @@ lib.recurseIntoAttrs (
     makePackages = final.callPackage ./makePackages.nix { };
 
     makeProfile = final.callPackage ./makeProfile.nix { };
+
+    makeManifest = final.callPackage ./makeManifest.nix { };
   })
 )

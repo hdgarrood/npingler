@@ -5,6 +5,7 @@ use camino::Utf8PathBuf;
 use clap::builder::{ValueParser, ValueParserFactory};
 
 use crate::clap::ShellWords;
+use crate::diff::DiffStyle;
 use crate::directories::ProjectPaths;
 
 /// A friendly Nix profile manager.
@@ -173,6 +174,11 @@ pub struct ProfileArgs {
     /// This may contain shell-quoted arguments.
     #[arg(long)]
     pub diff_derivations: Option<String>,
+
+    /// Describes how to summarize the changes between your old and new profiles after the new
+    /// profile has been built.
+    #[arg(long)]
+    pub diff_style: Option<DiffStyle>,
 }
 
 /// A reference to a nix profile.
