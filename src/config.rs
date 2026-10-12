@@ -7,6 +7,7 @@ use miette::miette;
 use crate::clap::ShellWords;
 use crate::cli::Args;
 use crate::cli::SwitchArgs;
+use crate::diff::DiffStyle;
 use crate::directories::ProjectPaths;
 use crate::format_bulleted_list;
 use crate::nix::Nix;
@@ -43,6 +44,7 @@ pub struct Profile {
     file: Option<String>,
     extra_switch_args: Option<Vec<String>>,
     diff_derivations: Option<Vec<String>>,
+    diff_style: Option<DiffStyle>,
 }
 
 #[derive(serde::Deserialize, Default, Debug, Clone)]
@@ -402,5 +404,13 @@ impl Config {
             })
             .transpose()?
             .or_else(|| self.file.profile.diff_derivations.clone()))
+    }
+
+    pub fn diff_style(&self) -> DiffStyle {
+        self.switch_args
+            .profile
+            .diff_style
+            .or_else(|| self.file.profile.diff_style)
+            .unwrap_or_default()
     }
 }
