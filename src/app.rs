@@ -15,6 +15,8 @@ use tracing::instrument;
 use crate::cli;
 use crate::cli::Args;
 use crate::config::Config;
+use crate::diff_style::DiffResult;
+use crate::diff_style::diff;
 use crate::format_bulleted_list;
 use crate::fs::resolve_symlink_utf8;
 use crate::nix::Nix;
@@ -300,24 +302,17 @@ impl App {
 
     fn diff_trees(&self, old: Option<&Utf8Path>, new: &Utf8Path) -> miette::Result<()> {
         tracing::info!("Built Nix profile: {new}");
-        let old = match old {
-            None => return Ok(()),
-            Some(old) => old,
-        };
 
-        let diff = diff_trees::Diff::new(old.as_std_path(), new.as_std_path()).into_diagnostic()?;
-        // We have to display the diff to see if it's actually empty. See https://github.com/9999years/npingler/issues/68
-        let displayed_diff = format!(
-            "{}",
-            diff.display(diff_trees::DisplayDiffOpts::new().color(true))
-        );
-
-        if displayed_diff.is_empty() {
-            // Sometimes, the profile path changes, but no installed paths actually
-            // change their contents.
-            tracing::info!("No changes from current profile");
-        } else {
-            tracing::info!("Changes from current profile:\n{}", displayed_diff);
+        match diff(self.config.diff_style(), old, new)? {
+            DiffResult::NoChanges => {
+                // Sometimes, the profile path changes, but no installed paths actually
+                // change their contents.
+                tracing::info!("No changes from current profile")
+            }
+            DiffResult::Changes(Some(displayed_diff)) => {
+                tracing::info!("Changes from current profile:\n{}", displayed_diff)
+            }
+            DiffResult::Changes(None) => {}
         }
 
         Ok(())

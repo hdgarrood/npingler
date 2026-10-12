@@ -4,6 +4,7 @@ mod app;
 mod clap;
 mod cli;
 mod config;
+mod diff_style;
 mod directories;
 mod format_bulleted_list;
 mod fs;
