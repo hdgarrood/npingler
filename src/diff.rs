@@ -51,7 +51,8 @@ struct PackageName(String);
 #[serde(rename_all = "camelCase")]
 struct ManifestEntry {
     version: String,
-    store_path: Utf8PathBuf,
+    /// nixpkgs is permitted to not have a store path, but everything else should have one
+    store_path: Option<Utf8PathBuf>,
 }
 
 #[derive(Debug, serde::Deserialize, Default)]
@@ -144,60 +145,55 @@ impl Deref for ManifestDiff {
     }
 }
 
+fn fmt_manifest_diff_entry(package_name: &PackageName, entry: &ManifestDiffEntry) -> String {
+    let pkg = &package_name.0;
+    match entry {
+        ManifestDiffEntry::Added(entry) => {
+            format!("+ {} ({})", pkg, entry.version).green().to_string()
+        }
+        ManifestDiffEntry::Changed(old_entry, new_entry) => {
+            match (
+                Versioning::new(&old_entry.version),
+                Versioning::new(&new_entry.version),
+            ) {
+                (Some(old_version), Some(new_version)) => match old_version.cmp(&new_version) {
+                    Ordering::Less => {
+                        format!("^ {} ({} → {})", pkg, old_entry.version, new_entry.version)
+                            .green()
+                            .to_string()
+                    }
+                    Ordering::Greater => {
+                        format!("v {} ({} → {})", pkg, old_entry.version, new_entry.version)
+                            .red()
+                            .to_string()
+                    }
+                    Ordering::Equal => format!("~ {} ({})", pkg, old_entry.version)
+                        .yellow()
+                        .to_string(),
+                },
+                _ => format!("~ {} ({} → {})", pkg, old_entry.version, new_entry.version)
+                    .yellow()
+                    .to_string(),
+            }
+        }
+        ManifestDiffEntry::Removed(entry) => {
+            format!("- {} ({})", pkg, entry.version).red().to_string()
+        }
+    }
+}
+
 impl Display for ManifestDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Print nixpkgs first if present
+        let nixpkgs = PackageName("nixpkgs".to_string());
+        if let Some(value) = self.get(&nixpkgs) {
+            writeln!(f, "{}", fmt_manifest_diff_entry(&nixpkgs, value))?;
+        }
         for (key, value) in self.0.iter() {
-            match value {
-                ManifestDiffEntry::Added(entry) => {
-                    writeln!(f, "{}", format!("+ {} ({})", key.0, entry.version).green())?;
-                }
-                ManifestDiffEntry::Changed(old_entry, new_entry) => {
-                    match (
-                        Versioning::new(&old_entry.version),
-                        Versioning::new(&new_entry.version),
-                    ) {
-                        (Some(old_version), Some(new_version)) => {
-                            match old_version.cmp(&new_version) {
-                                Ordering::Less => writeln!(
-                                    f,
-                                    "{}",
-                                    format!(
-                                        "^ {} ({} → {})",
-                                        key.0, old_entry.version, new_entry.version
-                                    )
-                                    .green()
-                                )?,
-                                Ordering::Greater => writeln!(
-                                    f,
-                                    "{}",
-                                    format!(
-                                        "v {} ({} → {})",
-                                        key.0, old_entry.version, new_entry.version
-                                    )
-                                    .red()
-                                )?,
-                                Ordering::Equal => writeln!(
-                                    f,
-                                    "{}",
-                                    format!("~ {} ({})", key.0, old_entry.version).yellow()
-                                )?,
-                            }
-                        }
-                        _ => writeln!(
-                            f,
-                            "{}",
-                            format!(
-                                "~ {} ({} → {})",
-                                key.0, old_entry.version, new_entry.version
-                            )
-                            .yellow()
-                        )?,
-                    }
-                }
-                ManifestDiffEntry::Removed(entry) => {
-                    writeln!(f, "{}", format!("- {} ({})", key.0, entry.version).red())?;
-                }
+            if key == &nixpkgs {
+                continue;
             }
+            writeln!(f, "{}", fmt_manifest_diff_entry(key, value))?;
         }
         Ok(())
     }
