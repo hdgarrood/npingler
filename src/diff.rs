@@ -52,7 +52,8 @@ struct PackageName(String);
 #[serde(rename_all = "camelCase")]
 struct ManifestEntry {
     version: String,
-    store_path: Utf8PathBuf,
+    /// nixpkgs is permitted to not have a store path, but everything else should have one
+    store_path: Option<Utf8PathBuf>,
 }
 
 #[derive(Debug, serde::Deserialize, Default)]

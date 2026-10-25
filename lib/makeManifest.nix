@@ -6,7 +6,16 @@
 { paths }:
 let
   manifestAttrs = lib.listToAttrs (
-    builtins.map (p: {
+    [
+      {
+        name = "nixpkgs";
+        value = {
+          version = lib.version;
+          storePath = null;
+        };
+      }
+    ]
+    ++ builtins.map (p: {
       name = p.pname or p.name;
       value = {
         version = builtins.toString p.version or "0";
